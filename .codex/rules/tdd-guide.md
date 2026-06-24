@@ -1,60 +1,30 @@
-# TDD（テスト駆動開発）ガイド
+# TDD Guide
 
-## 概要
+## 基本サイクル
 
-**テスト駆動開発（TDD）** は、以下の 3つのフェーズを厳密に順守する開発手法です。
+1. RED: 失敗するテストを書く
+2. GREEN: 最小実装で通す
+3. REFACTOR: テストを通したまま整理する
 
-```
-🔴 RED    → 🟢 GREEN  → 🔵 REFACTOR
-(テスト)    (実装)       (改善)
-```
+## このプロジェクトで優先するテスト
 
-## Red-Green-Refactor サイクル
+- OpenAI Cost API client
+- DynamoDB repository
+- Auto Charge メール parser
+- 週次集計ロジック
+- SES report sender
+- Lambda handler
+- IaC template validation
 
-### Phase 1: 🔴 RED - テストを先に書く
-- 実装する前にテストを書く
-- テストは失敗する状態から始める
+## モック方針
 
-### Phase 2: 🟢 GREEN - テストを通す
-- テストを通すための実装をする
-- きれいさは後回し
+- OpenAI Cost API は HTTP mock を使う
+- DynamoDB は moto、local DynamoDB、または repository mock を使う
+- SES は送信 client を mock する
+- Secrets Manager は secret provider を差し替える
 
-### Phase 3: 🔵 REFACTOR - コードを改善
-- テストはそのまま
-- コードを改善、重複排除、命名改善など
+## 禁止
 
-## ルール
-
-### ✅ 必ず守る
-- 🔴 → 🟢 → 🔵 の順序
-- 各フェーズを順番に進める
-- テストが全て pass することを常に確認
-
-### ❌ 絶対にしてはいけないこと
-- テストなしで実装を始める
-- テストを修正してコードを通す
-- REFACTOR フェーズを省略する
-- 複数機能を同時に開発する
-
-## 3レイヤー別テスト
-
-各層ごとに独立したテストを書く：
-
-- **Presentation層**: API/UI のテスト（下層をモック）
-  - 参照: `docs/requirements/ui.md`（画面仕様）、`docs/requirements/api.md`（API仕様）
-- **Business Logic層**: ドメインロジックのテスト（DB をモック）
-  - 参照: `docs/requirements/functions.md`（機能・ビジネスルール）
-- **Data Access層**: DB操作のテスト（実DB またはメモリDB）
-  - 参照: `docs/requirements/data.md`（データスキーマ・仕様）
-
-## 各段階の詳細
-
-各フェーズの詳細な実行は、以下のエージェントが担当します：
-
-| エージェント | 役割 |
-|------------|------|
-| **backend-test-writer** / **frontend-test-writer** | 🔴 RED：失敗するテストを書く |
-| **backend-{repository,service,api}-layer** / **frontend-{component-builder,feature-writer}** | 🟢 GREEN：テストを通す実装 |
-| **backend-{repository,service,api}-layer** / **frontend-{component-builder,feature-writer}** | 🔵 REFACTOR：コード改善 |
-
-詳細な指示は各エージェントの定義を参照してください。
+- テストなしで parser や集計ロジックを実装しない
+- 実 secret をテストに使わない
+- 外部 API に依存するテストを通常の unit test に混ぜない

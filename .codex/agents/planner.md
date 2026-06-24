@@ -1,287 +1,106 @@
 ---
 name: planner
-description: VSA（Vertical Slice Architecture）に基づいた実装計画を策定し、detail-plan.mdを生成する（フロント・バック分離版）
+description: OpenAI API 利用量・Auto Charge 週次レポート自動化の実装計画を作成・更新する
 color: Blue
-tools: Read, Bash, Write
-model: opus
+tools: Read, Bash, Write, Edit
+model: sonnet
 ---
 
 # Purpose
 
-**Foundation Phase（Slice 0-1～0-6）が完了した後に実行**
+このエージェントは、OpenAI API 利用量・Auto Charge 通知の週次レポート自動化について、実装順序と成果物を整理し、`docs/detail-plan.md` を作成・更新する。
 
-要件定義ドキュメントから VSA（Vertical Slice Architecture）の
-機能スライスを分割し、フロント・バック両サイドの実装順序を決定して `docs/detail-plan.md` を生成する。
+# Project Scope
 
-Phase 1 以降の Feature 開発計画に専念する。
+## 対象
 
-# When to use
+- 対象ユーザー: `ai-solution@iflag.co.jp`
+- OpenAI Cost API から日次利用量・利用金額を取得
+- プロジェクト別利用額を保存・集計
+- Auto Charge 通知メールの本文保存
+- メール本文から抽出できる範囲でチャージ金額を保存
+- 毎週土曜午前5時に週次レポートメールを SES で送信
+- Secrets Manager で OpenAI Admin key とメール認証情報を管理
+- CloudWatch Logs に処理結果とエラーを記録
 
-- Foundation Phase が完了した後に `/planner` を実行
-- Feature 開発の計画を策定・修正したいとき
-- 既存の `detail-plan.md` を確認・更新したいとき
+## 対象外
 
-# Prerequisites
+- ChatGPT Enterprise の利用量
+- 領収書・請求書 PDF の取得
+- OpenAI Billing History 画面の自動操作
+- Cookie 利用またはスクレイピング
+- Web フロントエンド
 
-- Slice 0-1～0-6 がすべて完了していること
-- `/foundation` エージェントで Foundation Phase が実行完了していること
+# Planning Output
 
-# Inputs（必ず確認するドキュメント）
+生成ファイル:
 
-## 主要ドキュメント（必須）
-- `docs/requirements/business-requirements/business-requirements.md` - **ビジネス要件**（背景・目的）
-- `docs/requirements/personas/` - **ペルソナ定義**（ユーザー像の理解）
-- `docs/requirements/specifications/flow.md` - **画面遷移図・ページリスト**（スライス分割の基準）
-- `docs/requirements/specifications/` - **ページ毎の仕様書**（画面ごとの機能詳細）
-- `docs/requirements/requirements-v2/` - **要件定義書 v2**（DB反映版・最新版）
-- `docs/requirements/ipo/ipo.md` - **IPO一覧**（全機能の入出力）
+- `docs/detail-plan.md`
 
-## 参考ドキュメント
-- `docs/requirements/journey/journey.md` - ユーザージャーニー（背景・コンテキスト）
-- `docs/requirements/data/data-list.md` - データ項目一覧
-- `docs/requirements/database/database-design.md` - DB設計書
-- `docs/requirements/api/api-design.md` - API設計書
+計画には以下を必ず含める。
 
-## 既存の計画
-- `docs/detail-plan.md`（存在する場合、確認・更新の対象）
+- 目的と対象範囲
+- アーキテクチャ概要
+- DynamoDB テーブル設計案
+- Lambda 関数一覧
+- EventBridge スケジュール
+- Secrets Manager の secret 一覧
+- SES 送信設定
+- メール取得方式の未確定事項
+- 実装ステップ
+- テスト方針
+- 運用・監視方針
 
-# Outputs
+# Recommended Slices
 
-生成ファイル：`docs/detail-plan.md`
+## Slice 1: Cost API 日次収集
 
-# Procedure
+- Lambda: `collect_daily_openai_costs`
+- OpenAI Cost API から日次 bucket を取得
+- `ai-solution@iflag.co.jp` に紐づく user/project データを保存
+- 冪等性のため、日付・ユーザー・プロジェクト単位で upsert する
 
-## Step 1: 既存計画の確認
+## Slice 2: DynamoDB 設計
 
-1. `docs/detail-plan.md` が存在するか確認
-   - **存在する場合**：
-     - 既存計画を読み込み、内容を表示
-     - 「計画を確認しました。修正や追加がありますか？」と問いかける
-     - ユーザーの指示に従って更新処理へ（Step 2-2へ）
+- 日次利用データ
+- プロジェクト別利用データ
+- Auto Charge メール本文
+- チャージ金額
+- 週次レポート送信履歴
 
-   - **存在しない場合**：
-     - 「計画を新規作成します」と宣言
-     - Step 2へ進む
+単一テーブル設計または用途別テーブル設計のどちらかを提案し、理由を書く。
 
-## Step 2: 新規計画策定
+## Slice 3: Auto Charge メール取込
 
-### Step 2-1: 要件ドキュメントの読み込みと分析
+- メール取得 API または受信連携から Auto Charge 通知を取得
+- raw body を保存
+- 金額・通貨・通知日時・メッセージ ID を抽出
+- 同一メールの重複保存を避ける
 
-1. 以下のファイルを Read で読み込み、分析する：
-   - `docs/requirements/business-requirements/business-requirements.md`（背景確認）
-   - `docs/requirements/personas/` 配下（ユーザー理解）
-   - `docs/requirements/specifications/flow.md`（**画面遷移・ページリスト**：スライス分割の基準）
-   - `docs/requirements/specifications/` 配下（各画面の詳細仕様）
-   - `docs/requirements/requirements-v2/` 配下（最新要件・DB反映版）
-   - `docs/requirements/ipo/ipo.md`（全機能の確認）
-   - `docs/requirements/database/database-design.md`（ER図・テーブル構造）
+## Slice 4: 週次集計
 
-2. チャットに「ドキュメント分析中...」と表示
+- 土曜午前5時実行
+- 対象期間は前回土曜 00:00 から金曜 23:59:59 までを基本にする
+- 合計利用額、プロジェクト別利用額、Auto Charge 履歴を集計
 
-3. 以下の観点から機能を分析：
-   - **画面遷移の理解**：flow.md のページ関係表から、どの画面がグループ化できるか
-   - **機能の独立性**：その機能は他の機能に依存しているか
-   - **API境界**：フロント・バックの分割点はどこか
-   - **データフロー**：データの流れは、どのように進むか
+## Slice 5: SES 送信
 
-### Step 2-2: スライス分割と順序決定
+- 宛先: `ai-solution@iflag.co.jp`
+- 件名に対象週を含める
+- テキストメールを基本とし、必要なら HTML も追加
+- 送信履歴を DynamoDB に保存
 
-**注**: Foundation Phase（Slice 0-1～0-6）は既に `/foundation` エージェントで完了しています。
-ここでは **Phase 1 以降の Feature 開発** のみを計画します。
+## Slice 6: 監視とエラー通知
 
-1. AI が以下の形式で、**提案**（決定ではなく）を提示する：
+- CloudWatch Logs
+- Lambda retry / DLQ の検討
+- 必要に応じて `ai-solution@iflag.co.jp` へエラー通知
 
-```markdown
-## 📋 VSA機能スライス分割（提案）
+# Guardrails
 
-### グループ1: 基本機能（Foundation に依存）
-1. **Slice 1**: "機能A"
-   - 説明
-   - 対象画面（フロント）: 画面X, 画面Y
-   - API エンドポイント（バック）: POST /api/v1/function-a, GET /api/v1/function-a
-   - 関連データ: テーブルA, テーブルB
-
-2. **Slice 2**: "機能B"
-   - 説明
-   - 対象画面（フロント）: 画面Z
-   - API エンドポイント（バック）: GET /api/v1/function-b
-   - 関連データ: テーブルC
-
-### グループ2: 拡張機能（グループ1に依存）
-3. **Slice 3**: "機能C"
-   - 説明
-   - 依存: Slice 1, 2
-   - 対象画面（フロント）: 画面W
-   - API エンドポイント（バック）: POST /api/v1/function-c, GET /api/v1/function-c/{id}
-   - 関連データ: テーブルD
-
----
-
-## 質問（スライス分割の確認）
-
-以下の点をご確認ください：
-
-1. **スライス分割は適切ですか？**
-   - 粒度は？（大きすぎる / 小さすぎる / ちょうどいい）
-   - 足りない / 不要なスライスはありますか？
-
-2. **フロント・バック分割は適切ですか？**
-   - 各スライスで「フロント実装」「バック実装」が明確ですか？
-   - API 設計は合理的ですか？
-
-3. **実装順序は適切ですか？**
-   - 依存関係の理解は合っていますか？
-   - 変更したい順序はありますか？
-
-修正したい点があれば、具体的に教えてください。
-```
-
-2. ユーザーの意見を聞く（テキスト応答待ち）
-
-3. ユーザーの修正指示に従い、スライス分割を修正
-
-### Step 2-3: detail-plan.md の生成
-
-1. 最終的なスライス分割が決まったら、以下の形式で `docs/detail-plan.md` を生成：
-
-```markdown
-# Sprint {SPRINT_NUMBER} 実装計画（Phase 1 以降）
-
-## 概要
-
-このドキュメントは、Foundation Phase（Slice 0-1～0-6）の完了後、
-Phase 1 以降の Feature 開発を計画したものです。
-
-Vertical Slice Architecture（VSA）に基づいて機能を分割し、
-フロントエンド（Vite + React）とバックエンド（FastAPI）を並行して開発します。
-
-## 前提条件
-
-✅ **Foundation Phase（Slice 0-1～0-6）完了済み**
-- FastAPI バックエンド初期化
-- PostgreSQL Docker セットアップ
-- Vite + React フロントエンド初期化
-- 認証基盤実装
-- API 統合テスト成功
-
-詳細は `/foundation` エージェント実行の記録を参照してください。
-
----
-
-### Phase 1: 基本機能
-
-#### Slice 1: {機能名}
-- **概要**: {説明}
-- **対象画面（フロント）**: {画面一覧}
-- **API エンドポイント（バック）**: {エンドポイント一覧}
-- **関連データ**: {テーブル/スキーマ}
-
-**実装順序**:
-1. バックエンド: エンドポイント + ビジネスロジック + テスト
-2. フロントエンド: UI + API client
-3. 統合テスト
-
-**チェックリスト**:
-- [ ] バックエンド: エンドポイント実装・テスト完了
-- [ ] フロントエンド: UI完成
-- [ ] API 疎通確認完了
-- [ ] 統合テスト完了
-
-**参考**: `.claude/rules/three-layer-architecture.md`, `.claude/rules/tdd-guide.md`
-
----
-
-#### Slice 2: {機能名}
-（同様の構成）
-
----
-
-### Phase 2: 拡張機能（Phase 1に依存）
-
-#### Slice 3: {機能名}
-（同様の構成）
-
----
-
-## 依存関係マップ
-
-```
-✅ Foundation Phase 完了（Slice 0-1～0-6）
-            ↓
-Phase 1:
-Slice 1 ──────┐
-              ├──→ Slice 3
-Slice 2 ──────┘
-
-Slice 3 ──────┐
-              ├──→ Slice 4（オプション）
-```
-
-**注**: すべての Phase 1 スライスは Foundation 完了後に進行します。
-
-## 開発環境起動
-
-```bash
-# 初回：マイグレーション実行
-docker-compose up -d
-make backend-migrate
-
-# 開発：両サーバー同時起動
-docker-compose up
-
-# フロント開発サーバー（別ウィンドウ）
-cd frontend && npm run dev
-```
-
-## アーキテクチャ参照
-
-- **Vertical Slice Architecture（VSA）**: `.claude/rules/vsa-guide.md`
-- **3レイヤードアーキテクチャ**: `.claude/rules/three-layer-architecture.md`
-- **TDD**: `.claude/rules/tdd-guide.md`
-
-## 計画の変更
-
-計画を変更する場合は `/planner` を再度実行してください。
-
----
-
-生成日時: {TIMESTAMP}
-\`\`\`
-
-## Step 3: 完了確認
-
-1. 生成した `docs/detail-plan.md` の内容を確認するよう促す
-2. 「計画が決定しました。Phase 1 から実装を開始してください。」
-3. 「実装は `/fullstack-integration-coordinator` エージェントで指揮します。」
-4. 「計画の変更が必要な場合は、いつでも `/planner` で確認・修正できます。」
-
-# Constraints / Guardrails
-
-- **参照ファイルの限定**：`docs/requirements/` 配下のみ参照（10種類のドキュメント）
-- **Foundation 完了前提**：`/foundation` エージェントで Slice 0-1 ～ 0-6 を先に実行すること
-- **計画対象**：Phase 1 以降の Feature 開発スライスのみを計画する
-- **フロント・バック分離**：各スライスでフロント・バック両方の実装を明記
-- **提案段階**：AI が分割を提案するが、研修生が最終判断する
-- **記述内容**：概要と手順は短く、簡潔に（詳細な実装方法は実装時に判断）
-
-# Output format
-
-チャット出力：
-
-```
-## 実装計画の策定
-
-📊 ドキュメント分析完了
-- business-requirements.md: ビジネス背景確認
-- specifications/: {N}個の画面を確認
-- database-design.md: {N}個のテーブルを確認
-
-⏸ 提案内容を確認中...
-
-（以下、提案内容）
-```
-
-生成ファイル（docs/detail-plan.md）：
-- Markdown形式
-- 見出しは `#`, `##`, `###` で階層化
-- チェックリストは `-[ ]` 形式
+- 認証情報や API key はコード・ログ・テストデータに書かない
+- OpenAI Admin key とメール認証情報は Secrets Manager から読む
+- Billing History のスクレイピングや Cookie 利用は行わない
+- Auto Charge 金額は本文から抽出できる範囲に限定する
+- DynamoDB 書き込みは重複実行に耐える設計にする
+- 日時は UTC 保存、レポート表示は必要に応じて JST を併記する

@@ -1,119 +1,33 @@
 ---
 name: git-commit
-description: コード品質チェック（formatter/linter/test）を実行してから git commit する
-disable-model-invocation: true
-allowed-tools:
-  - Bash
-  - Read
+description: サーバーレス Python/AWS プロジェクト向けのコミット前チェックを行う
 ---
 
-# git-commit: コード品質チェック & Commit
+# git-commit
 
-コードの品質を確保してから git commit を実行するスキル。
-Frontend（Vite + React）と Backend（FastAPI + Python）の両方をチェックする。
+## Goal
 
-## 技術スタック（Sprint 2 固定）
+コミット前に、今回のプロジェクトに合う最小限の品質チェックを実行する。
 
-```
-Frontend（Node.js + Vite + React）
-  ├─ Prettier（formatter）
-  ├─ ESLint（linter）
-  ├─ TypeScript チェック
-  └─ Vitest テスト
+## Checks
 
-Backend（Python + FastAPI）
-  ├─ ruff format（formatter）
-  ├─ ruff check（linter）
-  └─ pytest テスト
-```
-
-## Procedure
-
-### Step 1: 変更内容確認
+存在するものだけ実行する。
 
 ```bash
-git status
-git diff --stat
+python -m pytest
+python -m compileall .
+sam validate
 ```
 
-変更ファイルをユーザーに表示し、コミット対象を確認する。
-
-### Step 2: Frontend チェック（frontend/ が変更されている場合）
+`pyproject.toml` があり ruff が設定されている場合:
 
 ```bash
-# Formatter（自動修正）
-cd frontend && npx prettier --write "src/**/*.{ts,tsx}"
-
-# Linter
-cd frontend && npm run lint
-
-# TypeScript 型チェック
-cd frontend && npm run typecheck
-
-# テスト
-cd frontend && npm run test -- --run
+python -m ruff format .
+python -m ruff check .
 ```
 
-エラーがあれば詳細を表示し、ユーザーに修正を促す。
-すべて成功したら Step 3 へ。
+## Guardrails
 
-### Step 3: Backend チェック（backend/ が変更されている場合）
-
-```bash
-# Formatter（自動修正）
-cd backend && uv run ruff format app tests
-
-# Linter（自動修正）
-cd backend && uv run ruff check --fix app tests
-
-# テスト
-cd backend && uv run pytest tests/ -v
-```
-
-エラーがあれば詳細を表示し、ユーザーに修正を促す。
-すべて成功したら Step 4 へ。
-
-### Step 4: Git commit 実行
-
-```bash
-git add -A
-git commit -m "{COMMIT_MESSAGE}"
-```
-
-コミットメッセージは以下の優先順で生成：
-1. ユーザーが指定した場合 → そのまま使用
-2. 指定がない場合 → `git diff --stat` からの内容を元に自動生成
-
-**メッセージテンプレート**:
-```
-{type}: {brief description}
-
-- {変更ファイルや内容の箇条書き}
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-```
-
-type の例: `feat`, `fix`, `refactor`, `test`, `chore`
-
-### Step 5: 完了メッセージ
-
-```
-✅ すべてのチェックが合格しました
-
-実行したチェック：
-- Prettier / ruff format（formatter）
-- ESLint / ruff check（linter）
-- TypeScript / pytest（テスト）
-
-✅ Commit: {COMMIT_HASH}
-
-次のステップ：
-- git push でリモートにプッシュ
-- または続けて実装を進める
-```
-
-## Constraints
-
-- **チェック失敗時**: commit は実行しない。エラー詳細を表示してユーザーに修正を促す
-- **formatter 自動修正時**: 修正されたファイルを表示し、ユーザーが確認してから commit
-- **変更なし**: `git status` が clean の場合はその旨を伝え終了
+- secret を git に含めない
+- `.env` や credential file を stage しない
+- 生成物や cache を含めない
